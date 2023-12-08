@@ -24,7 +24,7 @@ WorkflowMain.initialise(workflow, params, log)
 ========================================================================================
 */
 
-include { CloudDiamond } from './workflows/CloudDiamond'
+include { CloudDiamond } from './workflows/CloudDiamond2'
 
 //
 // WORKFLOW: Run main alignment pipeline
