@@ -103,7 +103,7 @@ process diamond_fastqs {
     val SRA_ACCESSION
 
     output:
-    file "4_diamond_fastqs.DONE"
+    file "4_diamondn.DONE"
     val SRA_ACCESSION
 
     script:
@@ -114,10 +114,32 @@ process diamond_fastqs {
         touch -f 4_diamondn.DONE
     fi
     """
-
-
 }
 
+process compress_outputs {
+    tag { SRA_ACCESSION }
+    label 'process_medium'
+    publishDir params.outdir, pattern: "*.DONE", 
+    saveAs: { "${SRA_ACCESSION}/${it}" }
+
+    input:
+    file diamondn_done
+    val SRA_ACCESSION
+
+    output:
+    file "5_compress.DONE"
+    val SRA_ACCESSION
+
+    script:
+    """
+    echo 5_compress $SRA_ACCESSION
+    process_accession.bash $SRA_ACCESSION 5_compress
+    if [ \$? -eq 0 ] ; then
+        touch -f 5_compress.DONE
+    fi
+    """
+    
+}
 
 workflow CloudDiamond {
     Channel.fromPath(params.sra_accessions_list) \
@@ -126,7 +148,8 @@ workflow CloudDiamond {
     | download_sra \
     | convert_sra_to_fastq \
     | join_paired_end_reads \
-    | diamond_fastqs
+    | diamond_fastqs \
+    | compress_outputs
     
 }
 
