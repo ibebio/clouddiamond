@@ -1,6 +1,7 @@
 #!/bin/bash
 #set -xv
 set -o pipefail
+set -e
 # This script gets the SRA accession and the aligner name as input parameters
 # It downloads the SRA file, converts it to fastq, aligns/diamondn's it to the reference genome
 # The output are stats files
@@ -30,6 +31,9 @@ fi
 # Assign the arguments to variables
 SRA_ACCESSION=$1
 STEP=$2
+
+# Bail out on undefined variables, set this after the positional parameters have been assigned
+set -u
 
 DOWNLOAD_DIR=$SRA_DIR/$SRA_ACCESSION/1_download
 FASTQ_DIR=$SRA_DIR/$SRA_ACCESSION/2_fastq
@@ -88,13 +92,15 @@ if [ ! -f ${SRA_DIR}/${SRA_ACCESSION}/2_fastq.done ] && [ -f ${SRA_DIR}/${SRA_AC
     fi
     cd ${CURR_DIR}
 
+    # Create the flag file
+    touch -f ${SRA_DIR}/${SRA_ACCESSION}/2_fastq.done
+
     # Delete previous step data
     if [[ "${DELETE_PREV}" == "1" ]] ; then
         rm ${DOWNLOAD_DIR}/${SRA_ACCESSION}
     fi
 
-    # Create the flag file
-    touch -f ${SRA_DIR}/${SRA_ACCESSION}/2_fastq.done
+
 fi
 fi # STEP
 
@@ -134,7 +140,7 @@ else # Just copy the fastq file to the join directory
     # Check if the joining was already done and successful (the flag file exists)
     if [ ! -f ${SRA_DIR}/${SRA_ACCESSION}/3_join.done ] && [ -f ${SRA_DIR}/${SRA_ACCESSION}/2_fastq.done ] ; then
         # Copy the fastq file to the join directory
-        cp ${FASTQ_DIR}/${SRA_ACCESSION}.fastq ${JOIN_DIR}/${SRA_ACCESSION}.merged.fastq
+        cp ${FASTQ_DIR}/${SRA_ACCESSION}_1.fastq ${JOIN_DIR}/${SRA_ACCESSION}.merged.fastq
 
         # Check if the copying was successful
         if [ $? -ne 0 ]; then
