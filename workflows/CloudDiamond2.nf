@@ -118,7 +118,7 @@ process diamond_fastqs {
 
 process compress_outputs {
     tag { SRA_ACCESSION }
-    label 'process_medium'
+    label 'process_highmem'
     publishDir params.outdir, pattern: "*.DONE", 
     saveAs: { "${SRA_ACCESSION}/${it}" }
 
