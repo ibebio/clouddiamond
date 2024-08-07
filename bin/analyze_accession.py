@@ -31,10 +31,12 @@ def parse_args():
     parser.add_argument('output_folder', help='Output folder')
     parser.add_argument('sra_accession', help='SRA accession id')
     parser.add_argument('sra_xml', help='SRA XML file')
-    parser.add_argument('--best_hit_threshold', help='Threshold for best hits', default=99.9)
     return parser.parse_args()
 
 def main():
+    ###########################################################################
+    # Initial setup
+    ###########################################################################
     args = parse_args()
     # Verify the arguments
     if not os.path.exists(args.diamond_file):
@@ -47,11 +49,15 @@ def main():
     output_folder = args.output_folder
     sra_accession = args.sra_accession
     sra_xml = args.sra_xml
-    best_hit_threshold = args.best_hit_threshold
 
     # Create output folder if it does not exist
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
+
+    
+    ###########################################################################
+    # Process SRA metadata from XML file
+    ###########################################################################
 
     # Read the SRA XML file
     with open(sra_xml, 'r') as f:
@@ -59,6 +65,10 @@ def main():
     # Get the number of reads, which is the "spots" attribute in RUN_SET
     num_reads = re.search(r'<RUN_SET.*?spots="(.*?)"', xml).group(1)
     print(f'Number of reads: {num_reads}')    
+
+    # Get the number of bases, which is the "bases" attribute in RUN_SET
+    num_bases = re.search(r'<RUN_SET.*?bases="(.*?)"', xml).group(1)
+    print(f'Number of bases: {num_bases}')
 
     # Get the sequencer type
     sequencer = re.search(r'<INSTRUMENT_MODEL>(.*?)</INSTRUMENT_MODEL>', xml).group(1)
@@ -102,6 +112,11 @@ def main():
         library_source = 'Not available'
     print(f'Library source: {library_source}')
 
+
+    ###########################################################################
+    # Process diamond output file
+    ###########################################################################
+
     # Read the diamond output file, either as plain text, or zstd compressed if it ends with .zst
     df = pd.read_csv(diamond_file, sep='\t', header=None)
     
@@ -111,44 +126,91 @@ def main():
     num_hits = df.shape[0]
     print(f'Number of hits: {num_hits}')
 
-    # Number of best hits -- the number of hits within 99.9% percentil of the highest bitscore
+    ###########################################################################
+    # Number of best hits
+    # We use the following thresholds, defined as percentiles of the bitscore column
+    # - 90% percentile  -- this is the data frame that is going to be stored, thus reduces the dataset to 10%
+    #   of the original size. Since it is sorted, the other thresholds are easy to compute. We also store the correspoding bitscore values for each threshold.
+    # - 95% percentile
+    # - 99% percentile
+    # - 99.9% percentile
+    #
     # Save these best hits in an extra data frame
-    best_hits = df[df['bitscore'] >= np.percentile(df['bitscore'], best_hit_threshold)]
-    best_hits.to_csv(os.path.join(output_folder, f'{sra_accession}_best_hits{best_hit_threshold}.diamondn'), sep='\t', index=False, header=False)
-    num_best_hits = best_hits.shape[0]
-    print(f'Number of best hits: {num_best_hits}')
+    thresholds = [90, 95, 99, 99.9]
+    best_hits = {}
+    best_hits_thresholds = {} # Store the bitscore values for each threshold
+    num_best_hits = {}
+    for threshold in thresholds:
+        best_hits_thresholds[threshold] = np.percentile(df['bitscore'], threshold)
+        best_hits[threshold] = df[df['bitscore'] >= best_hits_thresholds[threshold]]
+        # Sort the best hits by bitscore
+        best_hits[threshold] = best_hits[threshold].sort_values('bitscore', ascending=False)
+        num_best_hits[threshold] = best_hits[threshold].shape[0]
+        print(f'Number of best hits at {threshold} percentile: {num_best_hits[threshold]}')
+        # Save the 90% and 99.9% best hits in a file
+        if threshold == 90 or threshold == 99.9:
+            best_hits[threshold].to_csv(os.path.join(output_folder, f'{sra_accession}_best_hits{threshold}.diamondn.zst'), sep='\t', index=False, header=False)
+    
+    # Save the bitscore thresholds from the best_hits dict in a file
+    with open(os.path.join(output_folder, f'{sra_accession}_best_hits_thresholds.txt'), 'w') as f:
+        # Write the header
+        f.write('threshold\tbitscore\n')
+        for threshold in thresholds:
+            f.write(f'{threshold}\t{best_hits_thresholds[threshold]}\n')
+    #
+    ###########################################################################        
+    
 
     # Save the statistics in a file as a table, and as a JSON file
-    stats = pd.DataFrame({'sra_accession': [sra_accession], 'num_reads': [num_reads], 'num_hits': [num_hits], 'sequencer': [sequencer], 'year': [year], 'lab': [lab], 'ecotype': [ecotype], 'genotype': [genotype], 'library_strategy': [library_strategy], 'library_source': [library_source], 'num_best_hits': [num_best_hits]})
+    stats = pd.DataFrame({'sra_accession': [sra_accession], 'num_reads': [num_reads], 'num_bases': [num_bases], 'num_hits': [num_hits], 
+                          'sequencer': [sequencer], 
+                          'year': [year], 'lab': [lab], 'ecotype': [ecotype], 
+                          'genotype': [genotype], 
+                          'library_strategy': [library_strategy], 'library_source': [library_source], 
+                          'num_best_hits90': [num_best_hits[90]], 'num_best_hits95': [num_best_hits[95]], 
+                          'num_best_hits99': [num_best_hits[99]], 'num_best_hits999': [num_best_hits[99.9]]})
     
     stats.to_csv(os.path.join(output_folder, f'{sra_accession}_stats.txt'), sep='\t', index=False)
     stats.to_json(os.path.join(output_folder, f'{sra_accession}_stats.json'))
-
-    # Compute statistics based on the sseqid column
     
+
+    ###################################
+    # Compute statistics based on the sseqid column
+    ###################################
     # Number of hits per sseqid
     hits_per_sseqid = df['sseqid'].value_counts()
     
-    # Number of hits per sseqid, normalized by the number of reads
-    hits_per_sseqid_normalized = hits_per_sseqid / int(num_reads)
+    # Number of hits per sseqid, normalized by the number of bases * 1000 * 1000
+    hits_per_sseqid_normalized = hits_per_sseqid / int(num_bases) * 1000 * 1000
     
     # Flag the sseqids that are best hits
     # Add best_hit column to the data frame
     hits_per_sseqid = hits_per_sseqid.to_frame()
-    hits_per_sseqid['best_hit'] = hits_per_sseqid.index.isin(best_hits['sseqid'])
-    # Convert the best_hit column to int
-    hits_per_sseqid['best_hit'] = hits_per_sseqid['best_hit'].astype(int)
+    for threshold in thresholds:
+        hits_per_sseqid[f'best_hit{threshold}'] = hits_per_sseqid.index.isin(best_hits[threshold]['sseqid'])
+        # Convert the best_hit column to int
+        hits_per_sseqid[f'best_hit{threshold}'] = hits_per_sseqid[f'best_hit{threshold}'].astype(int)
     
     # Join the two data frames
     hits_per_sseqid = pd.concat([hits_per_sseqid, hits_per_sseqid_normalized], axis=1)
     
     # Rename the columns
-    hits_per_sseqid.columns = ['num_hits', 'best_hit', 'num_hits_normalized']
+    hits_per_sseqid.columns = ['num_hits', 'best_hit90', 'best_hit95', 'best_hit99', 'best_hit999', 'num_hits_normalized']
     
-    # Save the data frame
-    hits_per_sseqid.to_csv(os.path.join(output_folder, f'{sra_accession}_hits_per_sseqid.txt.zstd'), sep='\t')
+
+    ###################################
+    # Compute coverage statistics
+    ###################################
+
+
+
+    ###################################
+    # Save the main stats data frame
+    ###################################
+    hits_per_sseqid.to_csv(os.path.join(output_folder, f'{sra_accession}_hits_per_sseqid.txt.zst'), sep='\t')
 
     
 
 if __name__ == '__main__':
     main()
+
