@@ -1,0 +1,88 @@
+import glob
+
+configfile: "config/config.yaml"
+##################################################
+# Helper functions
+##################################################
+def get_diamondn_file(wildcards):
+    files = glob.glob(f'/ebio/abt6_projects/clouddiamond/data/diamondn/*/{wildcards.accession}/4_diamondn/{wildcards.referencedb}/{wildcards.accession}.diamondn.zst')
+    if len(files) == 1:
+        return files[0]
+    else:
+        raise ValueError(f"Expected 1 file, but found {len(files)} files for accession {wildcards.accession} and referencedb {wildcards.referencedb}")
+    
+
+def get_accession_xml(wildcards):
+    files = glob.glob(f'/ebio/abt6_projects/clouddiamond/data/diamondn/metadata/{wildcards.accession}.xml')
+    if len(files) == 1:
+        return files[0]
+    else:
+        raise ValueError(f"Expected 1 file, but found {len(files)} files for accession {wildcards.accession}")
+
+
+def get_accession_list():
+    with open(config["accession_list"], "r") as f:
+        return f.read().splitlines()
+
+
+##################################################
+# Rules
+##################################################
+
+rule all:
+    input:
+        #expand("results/{referencedb}/{referencedb}_stats.txt", referencedb=config["referencedb"]),
+        expand("results/{referencedb}/{accession}/analyze_accession.DONE", referencedb=config["referencedb"], accession=get_accession_list()),
+        expand("results/{referencedb}/{accession}/analyze_hits.DONE", referencedb=config["referencedb"], accession=get_accession_list())
+
+
+rule analyze_accession:
+    params:
+        output_dir="results/{referencedb}/{accession}",
+        accession="{accession}",
+        conda_env=config["conda_env"],
+        analyze_accession=config["analyze_accession"]
+    input:
+        diamondn_file=get_diamondn_file,
+        accession_xml=get_accession_xml,
+    output:
+        analysis_done=touch("results/{referencedb}/{accession}/analyze_accession.DONE"),
+        best_hits999="results/{referencedb}/{accession}/{accession}_best_hits99.9.diamondn.zst",
+        best_hits90="results/{referencedb}/{accession}/{accession}_best_hits90.diamondn.zst"
+    resources:
+        n=1,
+        time=lambda wildcards, attempt: 12 * 59 * attempt,
+        mem_gb_pt=lambda wildcards, attempt: 20 * attempt,
+    shell:
+        "scripts/analyze_accession.bash {params.conda_env} {params.analyze_accession} {input.diamondn_file} {params.output_dir} {params.accession} {input.accession_xml}"
+        
+
+rule analyze_hits:
+    params:
+        output_dir="results/{referencedb}/{accession}",
+        dmnd_cov_stats=config["dmnd_cov_stats"],
+        bins=config["analyze_hits_bins"],
+
+    input:
+        diamondn_file=get_diamondn_file,
+        accession_xml=get_accession_xml,
+        lengths_file=config["lengths_file"],
+        best_hits999="results/{referencedb}/{accession}/{accession}_best_hits99.9.diamondn.zst",
+        best_hits90="results/{referencedb}/{accession}/{accession}_best_hits90.diamondn.zst"
+    output:
+        analyze_hits_done=touch("results/{referencedb}/{accession}/analyze_hits.DONE")
+    resources:    
+        n=1,
+        time=lambda wildcards, attempt: 12 * 59 * attempt,
+        mem_gb_pt=lambda wildcards, attempt: 20 * attempt,
+    shell:
+        """
+        scripts/analyze_hits.bash \
+            {params.dmnd_cov_stats} \
+            {input.lengths_file} \
+            {input.diamondn_file} \
+            {input.best_hits999} \
+            {input.best_hits90} \
+            {params.output_dir} \
+            {params.bins}
+        """
