@@ -77,8 +77,26 @@ fn main() {
         let line = line.unwrap();
         let fields: Vec<&str> = line.split('\t').collect();
         let sequence_name = fields[1];
-        let start = fields[5].parse::<u64>().unwrap();
-        let end = fields[6].parse::<u64>().unwrap();
+        let start = match fields[5].parse::<u64>() {
+            Ok(value) => value,
+            Err(err) => {
+                eprintln!("Error parsing start value: {}", err);
+                eprintln!("Line: {}", line);
+                // std::process::exit(1);
+                continue
+            }
+        };
+        // let start = fields[5].parse::<u64>().unwrap();
+        // let end = fields[6].parse::<u64>().unwrap();
+        let end = match fields[6].parse::<u64>() {
+            Ok(value) => value,
+            Err(err) => {
+                eprintln!("Error parsing end value: {}", err);
+                eprintln!("Line: {}", line);
+                // std::process::exit(1);
+                continue
+            }
+        };
         // Check if end is less than start, if so, swap the values
         let (start, end) = if start < end {
             (start, end)
@@ -119,7 +137,7 @@ fn main() {
     for (sequence_name, sequence) in sequence_bins.iter() {
         writeln!(output, "{}\t{}\t{}\t{}", sequence_name, sequence.found as u64, sequence.sequence_length, sequence.bins.iter().map(|bin| bin.count.to_string()).collect::<Vec<String>>().join("\t")).unwrap();
     }
-
+    eprintln!("DONE\n");
     
     
 
