@@ -1,5 +1,5 @@
 #!/bin/bash
-
+set -euo pipefail
 # Parameters
 DMND_COV_STATS=$1
 LENGTHS_FILE=$2

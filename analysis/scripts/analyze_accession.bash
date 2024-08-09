@@ -1,5 +1,4 @@
 #!/bin/bash
-
 # Parameters
 CONDA_ENV=$1
 ANALYZE_ACCESSION=$2
@@ -14,6 +13,7 @@ ACCESSION_XML=$6
 # Activate conda environment
 source activate $CONDA_ENV
 
+set -euo pipefail
 # Run tool
 $ANALYZE_ACCESSION $DIAMONDN_FILE $OUTPUT_DIR $ACCESSION $ACCESSION_XML
 
