@@ -2,6 +2,7 @@ referencedb: "Ath-Rep"
 accession_list: "config/accession_list.txt"
 conda_env: " /tmp/global2/ibezrukov2/conda/envs/diamond_analysis"
 analyze_accession: "/ebio/abt6_projects7/small_projects/ibezrukov2/cloud-diamond/bin/analyze_accession.py"
+create_diamond_best_hits_per_read: "/ebio/abt6_projects7/small_projects/ibezrukov2/cloud-diamond/bin/create_best_hits_per_read_file.py"
 dmnd_cov_stats: "/ebio/abt6_projects7/small_projects/ibezrukov2/cloud-diamond/dmnd-cov-stats/target/release/dmnd-cov-stats"
 analyze_hits_bins: 100
 lengths_file: "/tmp/global2/ibezrukov2/cloud-diamond-data-processing/Ath-Rep.lenghts"

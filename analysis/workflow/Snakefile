@@ -33,7 +33,9 @@ rule all:
     input:
         #expand("results/{referencedb}/{referencedb}_stats.txt", referencedb=config["referencedb"]),
         expand("results/{referencedb}/{accession}/analyze_accession.DONE", referencedb=config["referencedb"], accession=get_accession_list()),
-        expand("results/{referencedb}/{accession}/analyze_hits.DONE", referencedb=config["referencedb"], accession=get_accession_list())
+        expand("results/{referencedb}/{accession}/analyze_hits.DONE", referencedb=config["referencedb"], accession=get_accession_list()),
+        expand("results/{referencedb}/{accession}/create_diamond_best_hits_per_read.DONE", referencedb=config["referencedb"], accession=get_accession_list()),
+        expand("results/{referencedb}/{accession}/analyze_best_hits_per_read.DONE", referencedb=config["referencedb"], accession=get_accession_list())
 
 
 rule analyze_accession:
@@ -83,6 +85,57 @@ rule analyze_hits:
             {input.diamondn_file} \
             {input.best_hits999} \
             {input.best_hits90} \
+            {params.output_dir} \
+            {params.bins}
+        """
+
+
+rule create_diamond_best_hits_per_read:
+    input:
+        diamondn_file=get_diamondn_file,
+    output:
+        create_diamond_best_hits_per_read_done=touch("results/{referencedb}/{accession}/create_diamond_best_hits_per_read.DONE"),
+        best_hits_per_read="results/{referencedb}/{accession}/{accession}_best_hits_per_read.diamondn.zst"
+    params:
+        output_dir="results/{referencedb}/{accession}",
+        accession="{accession}",
+        conda_env=config["conda_env"],
+        create_diamond_best_hits_per_read=config["create_diamond_best_hits_per_read"]
+    resources:
+        n=1,
+        time=lambda wildcards, attempt: 12 * 59 * attempt,
+        mem_gb_pt=lambda wildcards, attempt: 20 * attempt,
+    shell:
+        """
+        scripts/create_diamond_best_hits_per_read.bash \
+        {params.conda_env} \
+        {params.create_diamond_best_hits_per_read} \
+        {input.diamondn_file} \
+        {params.output_dir} \
+        {params.accession}
+        """
+
+
+rule analyze_best_hits_per_read:
+    params:
+        output_dir="results/{referencedb}/{accession}",
+        dmnd_cov_stats=config["dmnd_cov_stats"],
+        bins=config["analyze_hits_bins"],
+    input:
+        best_hits_per_read="results/{referencedb}/{accession}/{accession}_best_hits_per_read.diamondn.zst",
+        lengths_file=config["lengths_file"],
+    output:
+        analyze_best_hits_per_read_done=touch("results/{referencedb}/{accession}/analyze_best_hits_per_read.DONE")
+    resources:
+        n=1,
+        time=lambda wildcards, attempt: 12 * 59 * attempt,
+        mem_gb_pt=lambda wildcards, attempt: 20 * attempt,
+    shell:
+        """
+        scripts/analyze_best_hits_per_read.bash \
+            {params.dmnd_cov_stats} \
+            {input.lengths_file} \
+            {input.best_hits_per_read} \
             {params.output_dir} \
             {params.bins}
         """
